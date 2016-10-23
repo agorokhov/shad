@@ -65,7 +65,7 @@ function count_pages {
     local date=$1
     if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/pages/${date}/_SUCCESS >/dev/null 2>&1; then
         echo "Pages ${date}"
-        #${HDFS_COMMAND} -rm -r ${HDFS_DATA_DIR}/pages/${date}.tmp
+        ${HDFS_COMMAND} -rm -r ${HDFS_DATA_DIR}/pages/${date}.tmp
         ${HADOOP_STREAM_COMMAND} \
             -files ${SCRIPT_DIR}/top_pages.py \
             -D mapreduce.fieldsel.map.output.key.value.fields.spec=2 \
@@ -74,7 +74,7 @@ function count_pages {
             -combiner "./top_pages.py -f reducer_sum" \
             -reducer "./top_pages.py -f reducer_sum" \
             -input ${HDFS_DATA_DIR}/extended/${date} \
-            -output ${HDFS_DATA_DIR}/pages/${date}.tmp 
+            -output ${HDFS_DATA_DIR}/pages/${date}.tmp
 
         ${HADOOP_STREAM_COMMAND} \
             -files ${SCRIPT_DIR}/top_pages.py \
@@ -82,12 +82,53 @@ function count_pages {
             -mapper "./top_pages.py -f mapper_top" \
             -input ${HDFS_DATA_DIR}/pages/${date}.tmp \
             -output ${HDFS_DATA_DIR}/pages/${date}
-        #${HDFS_COMMAND} -rm -r ${HDFS_DATA_DIR}/pages/${date}.tmp
+        ${HDFS_COMMAND} -rm -r ${HDFS_DATA_DIR}/pages/${date}.tmp
     fi
     if ! ls ${LOCAL_DATA_DIR}/pages-${date}.txt >/dev/null 2>&1; then
         echo "Pages stat ${date}"
         ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/pages/${date}/part* | ${SCRIPT_DIR}/top_pages.py -f sort_pages | head -10 > ${LOCAL_DATA_DIR}/pages-${date}.txt.tmp && \
             mv ${LOCAL_DATA_DIR}/pages-${date}.txt.tmp ${LOCAL_DATA_DIR}/pages-${date}.txt
+    fi
+}
+
+
+function count_new_users {
+#./users.py -f reducer_day_users | ./users.py -f reducer_new_users --day 2016-10-07 | ./users.py -f count_new_users
+#
+    local date=$1
+    if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/users/${date}/_SUCCESS >/dev/null 2>&1; then
+        echo "Users ${date}"
+        ${HADOOP_STREAM_COMMAND} \
+            -files ${SCRIPT_DIR}/users.py \
+            -D mapreduce.job.reduces=8 \
+            -mapper cat \
+            -reducer "./users.py -f reducer_day_users" \
+            -input ${HDFS_DATA_DIR}/extended/${date} \
+            -output ${HDFS_DATA_DIR}/users/${date}
+    fi
+    if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/new_users/${date}/_SUCCESS >/dev/null 2>&1; then
+        echo "New users ${date}"
+        local input_path=
+        for day in {0..13}; do
+            d=`date -d "${date} -${day} day" +%F`
+            path="${HDFS_DATA_DIR}/users/${d}"
+            if ${HDFS_COMMAND} -ls ${path} >/dev/null 2>&1; then
+                input_path="${input_path} -input ${path}"
+            fi
+        done
+
+        ${HADOOP_STREAM_COMMAND} \
+            -files ${SCRIPT_DIR}/users.py \
+            -D mapreduce.job.reduces=8 \
+            -mapper cat \
+            -reducer "./users.py -f reducer_new_users --day ${date}" \
+            ${input_path} \
+            -output ${HDFS_DATA_DIR}/new_users/${date}
+    fi
+    if ! ls ${LOCAL_DATA_DIR}/new_users-${date}.txt >/dev/null 2>&1; then
+        echo "New users stat ${date}"
+        ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/new_users/${date}/part* | ${SCRIPT_DIR}/users.py -f count_new_users > ${LOCAL_DATA_DIR}/new_users-${date}.txt.tmp && \
+            mv ${LOCAL_DATA_DIR}/new_users-${date}.txt.tmp ${LOCAL_DATA_DIR}/new_users-${date}.txt
     fi
 }
 
@@ -105,3 +146,4 @@ mkdir -p ${LOCAL_DATA_DIR}
 make_extended_log ${DATE}
 count_sessions ${DATE}
 count_pages ${DATE}
+count_new_users ${DATE}
