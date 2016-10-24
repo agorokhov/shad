@@ -48,6 +48,7 @@ def reducer_day_users(_):
             current_key = key
             day = datetime.datetime.fromtimestamp(int(fields[1]))
             first_referer = fields[3]
+            was_signed = False
         if fields[2] == URL_SIGNUP:
             was_signed = True
     if current_key:
@@ -122,13 +123,14 @@ def mapper_mark_dataset(args):
     """
     try:
         os.getenv('mapreduce_map_input_file').index(args.dataset)
-        mark = 1
+        tag = 1
     except ValueError:
-        mark = 0
+        tag = 0
+    print >> sys.stderr, "Mark %s with tag %d" % (os.getenv('mapreduce_map_input_file'), tag)
 
     for line in sys.stdin:
         key, value = line.strip().split('\t', 1)
-        print "%s\t%d\t%s" % (key, mark, value)
+        print "%s\t%d\t%s" % (key, tag, value)
 
 
 def reducer_converted_users(args):
@@ -144,7 +146,7 @@ def reducer_converted_users(args):
     for line in sys.stdin:
         key, tag, _, _, was_signup = line.strip().split()
         tag = int(tag)
-        was_signup = bool(was_signup)
+        was_signup = True if was_signup == 'True' else False
         if current_key != key:
             if len(tags) == 2 and current_was_signup:
                 converted_users += 1

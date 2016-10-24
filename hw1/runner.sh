@@ -187,6 +187,7 @@ function count_facebook_conversion {
             -D stream.num.map.output.key.fields=2 \
             -D mapred.text.key.partitioner.options=-k1,1 \
             -D mapreduce.job.reduces=8 \
+            -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner \
             -mapper "./users.py -f mapper_mark_dataset --dataset /users/" \
             -reducer "./users.py -f reducer_converted_users --day ${date}" \
             ${input_path} \
@@ -199,6 +200,7 @@ function count_facebook_conversion {
             -D stream.num.map.output.key.fields=2 \
             -D mapred.text.key.partitioner.options=-k1,1 \
             -D mapreduce.job.reduces=8 \
+            -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner \
             -mapper "./users.py -f mapper_mark_dataset --dataset /users/" \
             -reducer "./users.py -f reducer_converted_users --day ${date}" \
             ${input_path} \
