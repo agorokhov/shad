@@ -4,8 +4,9 @@
 HDFS_LOG_DIR=/user/sandello/logs
 HDFS_COMMAND="hadoop fs"
 HDFS_DATA_DIR=/user/agorokhov/parsed
-LOCAL_DATA_DIR=/home/agorokhov/devel/1/stat
-SCRIPT_DIR=./
+LOCAL_DATA_DIR=/home/agorokhov/devel/stat
+SCRIPT_DIR=$(dirname $0)
+CONFIG_DIR=/home/agorokhov/devel/conf
 
 HADOOP_STREAM_COMMAND="hadoop jar /opt/hadoop/hadoop-streaming.jar"
 
@@ -23,6 +24,10 @@ function is_log_ready {
         ${HDFS_COMMAND} -ls $(hdfs_log_file ${date_next}) >/dev/null 2>&1 && echo "1"
 }
 
+function log_stage {
+    echo "++++++ "`date +"%F %T"`" $1"
+}
+
 function make_extended_log {
     local date=$1
     if ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/extended/${date}/_SUCCESS >/dev/null 2>&1; then
@@ -30,11 +35,11 @@ function make_extended_log {
     fi
     echo "Extended ${date}"
     ${HADOOP_STREAM_COMMAND} \
-        -files parse_access_log.py,IP2LOCATION-LITE-DB1.CSV \
+        -files ${SCRIPT_DIR}/parse_access_log.py,${CONFIG_DIR}/IP2LOCATION-LITE-DB1.CSV \
         -D mapreduce.job.reduces=0 \
         -mapper "./parse_access_log.py --geobase IP2LOCATION-LITE-DB1.CSV" \
         -input $(hdfs_log_file ${date}) \
-        -output ${HDFS_DATA_DIR}/extended/${date}/
+        -output ${HDFS_DATA_DIR}/extended/${date}/ || exit 1
 }
 
 function count_sessions {
@@ -42,7 +47,7 @@ function count_sessions {
     if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/sessions/${date}/_SUCCESS >/dev/null 2>&1; then
         echo "Sessions ${date}"
         ${HADOOP_STREAM_COMMAND} \
-            -files user_sessions.py \
+            -files ${SCRIPT_DIR}/user_sessions.py \
             -D mapred.output.key.comparator.class=org.apache.hadoop.mapred.lib.KeyFieldBasedComparator \
             -D mapred.text.key.comparator.options=-k1,2 \
             -D stream.num.map.output.key.fields=2 \
@@ -52,7 +57,7 @@ function count_sessions {
             -reducer "./user_sessions.py" \
             -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner \
             -input ${HDFS_DATA_DIR}/extended/${date} \
-            -output ${HDFS_DATA_DIR}/sessions/${date}/
+            -output ${HDFS_DATA_DIR}/sessions/${date}/ || exit 1
     fi
     if ! ls ${LOCAL_DATA_DIR}/sessions-${date}.txt >/dev/null 2>&1; then
         echo "Sessions stat ${date}"
@@ -74,14 +79,14 @@ function count_pages {
             -combiner "./top_pages.py -f reducer_sum" \
             -reducer "./top_pages.py -f reducer_sum" \
             -input ${HDFS_DATA_DIR}/extended/${date} \
-            -output ${HDFS_DATA_DIR}/pages/${date}.tmp
+            -output ${HDFS_DATA_DIR}/pages/${date}.tmp || exit 1
 
         ${HADOOP_STREAM_COMMAND} \
             -files ${SCRIPT_DIR}/top_pages.py \
             -D mapreduce.job.reduces=0 \
             -mapper "./top_pages.py -f mapper_top" \
             -input ${HDFS_DATA_DIR}/pages/${date}.tmp \
-            -output ${HDFS_DATA_DIR}/pages/${date}
+            -output ${HDFS_DATA_DIR}/pages/${date} || exit 1
         ${HDFS_COMMAND} -rm -r ${HDFS_DATA_DIR}/pages/${date}.tmp
     fi
     if ! ls ${LOCAL_DATA_DIR}/pages-${date}.txt >/dev/null 2>&1; then
@@ -93,8 +98,6 @@ function count_pages {
 
 
 function count_new_users {
-#./users.py -f reducer_day_users | ./users.py -f reducer_new_users --day 2016-10-07 | ./users.py -f count_new_users
-#
     local date=$1
     if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/users/${date}/_SUCCESS >/dev/null 2>&1; then
         echo "Users ${date}"
@@ -104,7 +107,7 @@ function count_new_users {
             -mapper cat \
             -reducer "./users.py -f reducer_day_users" \
             -input ${HDFS_DATA_DIR}/extended/${date} \
-            -output ${HDFS_DATA_DIR}/users/${date}
+            -output ${HDFS_DATA_DIR}/users/${date} || exit 1
     fi
     if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/new_users/${date}/_SUCCESS >/dev/null 2>&1; then
         echo "New users ${date}"
@@ -121,9 +124,9 @@ function count_new_users {
             -files ${SCRIPT_DIR}/users.py \
             -D mapreduce.job.reduces=8 \
             -mapper cat \
-            -reducer "./users.py -f reducer_new_users --day ${date}" \
+            -reducer "./users.py -f reducer_new_users --day ${date} --get-users-stat" \
             ${input_path} \
-            -output ${HDFS_DATA_DIR}/new_users/${date}
+            -output ${HDFS_DATA_DIR}/new_users/${date} || exit 1
     fi
     if ! ls ${LOCAL_DATA_DIR}/new_users-${date}.txt >/dev/null 2>&1; then
         echo "New users stat ${date}"
@@ -131,6 +134,84 @@ function count_new_users {
             mv ${LOCAL_DATA_DIR}/new_users-${date}.txt.tmp ${LOCAL_DATA_DIR}/new_users-${date}.txt
     fi
 }
+
+
+function count_facebook_conversion {
+    local date=$1
+    if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/new_fb_users/${date}/_SUCCESS >/dev/null 2>&1; then
+        log_stage "New facebook users ${date}"
+        local input_path=
+        for day in {0..13}; do
+            d=`date -d "${date} -${day} day" +%F`
+            path="${HDFS_DATA_DIR}/users/${d}"
+            echo "Check ${path}"
+            if ${HDFS_COMMAND} -ls ${path} >/dev/null 2>&1; then
+                input_path="${input_path} -input ${path}"
+                echo "Path ${path} found"
+            fi
+        done
+
+        echo "${HADOOP_STREAM_COMMAND} \
+            -files ${SCRIPT_DIR}/users.py \
+            -D mapreduce.job.reduces=8 \
+            -mapper cat \
+            -reducer "./users.py -f reducer_new_users --day ${date} --get-new-facebook-users" \
+            ${input_path} \
+            -output ${HDFS_DATA_DIR}/new_fb_users/${date}"
+
+        ${HADOOP_STREAM_COMMAND} \
+            -files ${SCRIPT_DIR}/users.py \
+            -D mapreduce.job.reduces=8 \
+            -mapper cat \
+            -reducer "./users.py -f reducer_new_users --day ${date} --get-new-facebook-users" \
+            ${input_path} \
+            -output ${HDFS_DATA_DIR}/new_fb_users/${date} || exit 1
+    fi
+
+    if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/conv_fb_users/${date}/_SUCCESS >/dev/null 2>&1; then
+        log_stage "Converted facebook users ${date}"
+        local input_path=
+        for day in {0..2}; do
+            d=`date -d "${date} -${day} day" +%F`
+            path="${HDFS_DATA_DIR}/new_fb_users/${d}"
+            if ${HDFS_COMMAND} -ls ${path} >/dev/null 2>&1; then
+                input_path="${input_path} -input ${path}"
+            fi
+        done
+        input_path="${input_path} -input ${HDFS_DATA_DIR}/users/${date}"
+
+        echo "${HADOOP_STREAM_COMMAND} \
+            -files ${SCRIPT_DIR}/users.py \
+            -D mapred.output.key.comparator.class=org.apache.hadoop.mapred.lib.KeyFieldBasedComparator \
+            -D mapred.text.key.comparator.options=-k1,2 \
+            -D stream.num.map.output.key.fields=2 \
+            -D mapred.text.key.partitioner.options=-k1,1 \
+            -D mapreduce.job.reduces=8 \
+            -mapper "./users.py -f mapper_mark_dataset --dataset /users/" \
+            -reducer "./users.py -f reducer_converted_users --day ${date}" \
+            ${input_path} \
+            -output ${HDFS_DATA_DIR}/conv_fb_users/${date}"
+
+        ${HADOOP_STREAM_COMMAND} \
+            -files ${SCRIPT_DIR}/users.py \
+            -D mapred.output.key.comparator.class=org.apache.hadoop.mapred.lib.KeyFieldBasedComparator \
+            -D mapred.text.key.comparator.options=-k1,2 \
+            -D stream.num.map.output.key.fields=2 \
+            -D mapred.text.key.partitioner.options=-k1,1 \
+            -D mapreduce.job.reduces=8 \
+            -mapper "./users.py -f mapper_mark_dataset --dataset /users/" \
+            -reducer "./users.py -f reducer_converted_users --day ${date}" \
+            ${input_path} \
+            -output ${HDFS_DATA_DIR}/conv_fb_users/${date} || exit 1
+    fi
+
+    if ! ls ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt >/dev/null 2>&1; then
+        echo "Converted facebook users stat ${date}"
+        ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/conv_fb_users/${date}/part* | ${SCRIPT_DIR}/users.py -f count_converted_users > ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt.tmp && \
+            mv ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt.tmp ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt
+    fi
+}
+
 
 DATE=$1
 shift
@@ -147,3 +228,4 @@ make_extended_log ${DATE}
 count_sessions ${DATE}
 count_pages ${DATE}
 count_new_users ${DATE}
+count_facebook_conversion ${DATE}

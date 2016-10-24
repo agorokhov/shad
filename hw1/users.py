@@ -3,6 +3,7 @@
 """
 
 import sys
+import os
 import re
 import datetime
 import argparse
@@ -24,6 +25,10 @@ def main():
     parser.add_argument('-f', '--function', choices=methods.keys(),
                         default=None, required=True, help='Function to call')
     parser.add_argument('--day', help='Date for new/lost users')
+    parser.add_argument('--get-new-facebook-users', action='store_true', help='Emit new users')
+    parser.add_argument('--get-users-stat', action='store_true', help='Emit new/lost users statistics')
+    parser.add_argument('--dataset', help='Substring in dataset path to mark as 1 in mapper_mark_dataset')
+
     args = parser.parse_args()
 
     methods[args.function](args)
@@ -50,12 +55,20 @@ def reducer_day_users(_):
 
 
 def reducer_new_users(args):
+    def is_facebook_user(line):
+        try:
+            line.split()[2].index('facebook')
+        except ValueError:
+            return False
+        return True
+
     new_users = 0
     lost_users = 0
     last_day = args.day
     first_day = (datetime.datetime.strptime(args.day, "%Y-%m-%d") - datetime.timedelta(days=13)).strftime("%F")
 
     current_key = None
+    current_line = None
     visit_last_day, visit_first_day = False, False
     days_visited = 0
 
@@ -67,9 +80,12 @@ def reducer_new_users(args):
                 if days_visited == 1:
                     if visit_last_day:
                         new_users += 1
+                        if args.get_new_facebook_users and is_facebook_user(current_line):
+                            print current_line
                     if visit_first_day:
                         lost_users += 1
             current_key = key
+            current_line = line.strip()
             visit_last_day, visit_first_day = False, False
             days_visited = 0
         days_visited += 1
@@ -81,10 +97,13 @@ def reducer_new_users(args):
         if days_visited == 1:
             if visit_last_day:
                 new_users += 1
+                if args.get_new_facebook_users and is_facebook_user(current_line):
+                    print current_line
             if visit_first_day:
                 lost_users += 1
 
-    print "%d\t%d" % (new_users, lost_users)
+    if args.get_users_stat:
+        print "%d\t%d" % (new_users, lost_users)
 
 
 def count_new_users(_):
@@ -95,6 +114,62 @@ def count_new_users(_):
         for i in range(len(sum_fields)):
             sum_fields[i] += fields[i]
     print "%d\t%d" % (sum_fields[0], sum_fields[1])
+
+
+def mapper_mark_dataset(args):
+    """
+    Mark dataset with args.dataset in path with tag=1
+    """
+    try:
+        os.getenv('mapreduce_map_input_file').index(args.dataset)
+        mark = 1
+    except ValueError:
+        mark = 0
+
+    for line in sys.stdin:
+        key, value = line.strip().split('\t', 1)
+        print "%s\t%d\t%s" % (key, mark, value)
+
+
+def reducer_converted_users(args):
+    """
+    Join datasets with tag=0 and 1 and select with tag=1
+    where 4th field==True (users, visited /signup)
+    """
+    new_users = 0
+    converted_users = 0
+    current_key = None
+    tags = set()
+    current_was_signup = False
+    for line in sys.stdin:
+        key, tag, _, _, was_signup = line.strip().split()
+        tag = int(tag)
+        was_signup = bool(was_signup)
+        if current_key != key:
+            if len(tags) == 2 and current_was_signup:
+                converted_users += 1
+            current_key = key
+            tags = set()
+            current_was_signup = False
+        if tag == 0:
+            new_users += 1
+        elif was_signup: # tag=1 and was_signup
+            current_was_signup = True
+        tags.add(tag)
+    if len(tags) == 2 and current_was_signup:
+        converted_users += 1
+    print "%d\t%d" % (new_users, converted_users)
+
+
+def count_converted_users(_):
+    sum_fields = [0, 0]
+    for line in sys.stdin:
+        fields = line.strip().split('\t')
+        fields = [int(f) for f in fields]
+        for i in range(len(sum_fields)):
+            sum_fields[i] += fields[i]
+    print "%d\t%d\t%f" % (sum_fields[0], sum_fields[1],
+                          sum_fields[1]/float(sum_fields[0]) if sum_fields[0] > 0 else 0)
 
 
 if __name__ == '__main__':
