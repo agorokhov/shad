@@ -32,7 +32,7 @@ def count_sessions_stat(args):
             fields = [int(f) for f in fields]
             for i in range(5):
                 sum_fields[i] += fields[i]
-    print "%d\t%d\t%d\t%.2f\t%.2f\t%.2f" % (
+    print "%d\t%d\t%d\t%f\t%f\t%f" % (
         sum_fields[0],
         sum_fields[1],
         sum_fields[2],
