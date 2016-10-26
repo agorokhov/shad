@@ -35,6 +35,7 @@ def get_geo_names():
 
 @app.teardown_appcontext
 def teardown_geo_names(exception):
+    if hasattr(g, '_geo_names'):
         delattr(g, '_geo_names')
 
 

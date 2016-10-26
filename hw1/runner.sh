@@ -61,7 +61,7 @@ function count_sessions {
     fi
     if ! ls ${LOCAL_DATA_DIR}/sessions-${date}.txt >/dev/null 2>&1; then
         log_stage "Sessions stat ${date}"
-        ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/sessions/${date}/part* | ./user_sessions.py --sum > ${LOCAL_DATA_DIR}/sessions-${date}.txt.tmp && \
+        ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/sessions/${date}/part* | ${SCRIPT_DIR}/user_sessions.py --sum > ${LOCAL_DATA_DIR}/sessions-${date}.txt.tmp && \
             mv ${LOCAL_DATA_DIR}/sessions-${date}.txt.tmp ${LOCAL_DATA_DIR}/sessions-${date}.txt
     fi
 }
