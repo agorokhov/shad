@@ -70,9 +70,12 @@ def ip_string_to_number(ip):
 def ip_to_country_code(regions, region_keys, ip):
     ip_number = ip_string_to_number(ip)
     index = bisect_left(region_keys, ip_number)
-    if index:
+    if index >= len(region_keys) or region_keys[index] > ip_number:
+        index -= 1
+    try:
         return regions[index]['code']
-    raise ValueError
+    except IndexError:
+        return '-'
 
 
 def load_regions(regions_file):
