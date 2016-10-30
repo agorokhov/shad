@@ -2,12 +2,12 @@
 
 
 HDFS_LOG_DIR=/user/sandello/logs
-HDFS_COMMAND="hadoop fs"
 HDFS_DATA_DIR=/user/agorokhov/parsed
 LOCAL_DATA_DIR=/home/agorokhov/devel/stat
 SCRIPT_DIR=$(dirname $0)
 CONFIG_DIR=/home/agorokhov/devel/conf
 
+HDFS_COMMAND="hadoop fs"
 HADOOP_STREAM_COMMAND="hadoop jar /opt/hadoop/hadoop-streaming.jar"
 
 
