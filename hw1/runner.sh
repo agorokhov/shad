@@ -163,6 +163,7 @@ function count_facebook_conversion {
     if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/conv_fb_users/${date}/_SUCCESS >/dev/null 2>&1; then
         log_stage "Converted facebook users ${date}"
         local input_path=
+        local mapper_args=
         for day in {0..2}; do
             d=`date -d "${date} -${day} day" +%F`
             path="${HDFS_DATA_DIR}/new_fb_users/${d}"
@@ -170,8 +171,19 @@ function count_facebook_conversion {
                 input_path="${input_path} -input ${path}"
             fi
         done
+        for day in {1..2}; do
+            d=`date -d "${date} -${day} day" +%F`
+            path="${HDFS_DATA_DIR}/users/${d}"
+            if ${HDFS_COMMAND} -ls ${path} >/dev/null 2>&1; then
+                input_path="${input_path} -input ${path}"
+                mapper_args="${mapper_args} --dataset /users/${d} --tag 2"
+            fi
+        done
         input_path="${input_path} -input ${HDFS_DATA_DIR}/users/${date}"
+        mapper_args="${mapper_args} --dataset /users/${date} --tag 1"
 
+        echo "${mapper_args}"
+        echo 0
         ${HADOOP_STREAM_COMMAND} \
             -files ${SCRIPT_DIR}/users.py \
             -D mapred.output.key.comparator.class=org.apache.hadoop.mapred.lib.KeyFieldBasedComparator \
@@ -180,7 +192,7 @@ function count_facebook_conversion {
             -D mapred.text.key.partitioner.options=-k1,1 \
             -D mapreduce.job.reduces=8 \
             -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner \
-            -mapper "./users.py -f mapper_mark_dataset --dataset /users/" \
+            -mapper "./users.py -f mapper_mark_dataset ${mapper_args}" \
             -reducer "./users.py -f reducer_converted_users --day ${date}" \
             ${input_path} \
             -output ${HDFS_DATA_DIR}/conv_fb_users/${date} || exit 1

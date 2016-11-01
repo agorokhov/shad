@@ -27,7 +27,10 @@ def main():
     parser.add_argument('--day', help='Date for new/lost users')
     parser.add_argument('--get-new-facebook-users', action='store_true', help='Emit new users')
     parser.add_argument('--get-users-stat', action='store_true', help='Emit new/lost users statistics')
-    parser.add_argument('--dataset', help='Substring in dataset path to mark as 1 in mapper_mark_dataset')
+    parser.add_argument('--dataset', action='append',
+                        help='Substring in dataset path to mark as 1 in mapper_mark_dataset')
+    parser.add_argument('--tag', '--dataset-mark', action='append', dest='dataset_mark',
+                        help='Mark for dataset')
 
     args = parser.parse_args()
 
@@ -121,22 +124,31 @@ def mapper_mark_dataset(args):
     """
     Mark dataset with args.dataset in path with tag=1
     """
-    try:
-        os.getenv('mapreduce_map_input_file').index(args.dataset)
-        tag = 1
-    except ValueError:
+    tag = None
+    for dataset, tag_ in zip(args.dataset, args.dataset_mark):
+        try:
+            os.getenv('mapreduce_map_input_file').index(dataset)
+            tag = tag_
+            break
+        except ValueError:
+            pass
+    if tag is None:
         tag = 0
-    print >> sys.stderr, "Mark %s with tag %d" % (os.getenv('mapreduce_map_input_file'), tag)
+    print >> sys.stderr, "Mark %s with tag %s" % (os.getenv('mapreduce_map_input_file'), tag)
 
     for line in sys.stdin:
         key, value = line.strip().split('\t', 1)
-        print "%s\t%d\t%s" % (key, tag, value)
+        print "%s\t%s\t%s" % (key, tag, value)
 
 
 def reducer_converted_users(args):
     """
-    Join datasets with tag=0 and 1 and select with tag=1
-    where 4th field==True (users, visited /signup)
+    Join datasets with:
+    - tag=0 - new users
+    - tag=1 - users from current day (day X)
+    - tag=2 - users from day X-1 and X-2
+    Select users with tag=1 and and 1 and select with tag=1 and 4th field==True
+    (i.e. users, visited /signup), but without tag=2
     """
     new_users = 0
     converted_users = 0
@@ -155,9 +167,16 @@ def reducer_converted_users(args):
             current_was_signup = False
         if tag == 0:
             new_users += 1
-        elif was_signup: # tag=1 and was_signup
-            current_was_signup = True
-        tags.add(tag)
+            tags.add(tag)
+        elif tag == 1:
+            if was_signup:
+                current_was_signup = True
+            tags.add(tag)
+        elif tag == 2:
+            if was_signup and current_was_signup:
+                if 0 in tags:
+                    print >> sys.stderr, "Turn off current_was_signup for key=%s" % key
+                current_was_signup = False
     if len(tags) == 2 and current_was_signup:
         converted_users += 1
     print "%d\t%d" % (new_users, converted_users)
