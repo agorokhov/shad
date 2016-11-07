@@ -103,9 +103,14 @@ function count_new_users {
         log_stage "Users ${date}"
         ${HADOOP_STREAM_COMMAND} \
             -files ${SCRIPT_DIR}/users.py \
+            -D mapred.output.key.comparator.class=org.apache.hadoop.mapred.lib.KeyFieldBasedComparator \
+            -D mapred.text.key.comparator.options=-k1,2 \
+            -D stream.num.map.output.key.fields=2 \
+            -D mapred.text.key.partitioner.options=-k1,1 \
             -D mapreduce.job.reduces=8 \
             -mapper cat \
             -reducer "./users.py -f reducer_day_users" \
+            -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner \
             -input ${HDFS_DATA_DIR}/extended/${date} \
             -output ${HDFS_DATA_DIR}/users/${date} || exit 1
     fi
@@ -160,7 +165,7 @@ function count_facebook_conversion {
             -output ${HDFS_DATA_DIR}/new_fb_users/${date} || exit 1
     fi
 
-    if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/conv_fb_users/${date}/_SUCCESS >/dev/null 2>&1; then
+    if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/conv_fb_users_2ver/${date}/_SUCCESS >/dev/null 2>&1; then
         log_stage "Converted facebook users ${date}"
         local input_path=
         local mapper_args=
@@ -195,12 +200,12 @@ function count_facebook_conversion {
             -mapper "./users.py -f mapper_mark_dataset ${mapper_args}" \
             -reducer "./users.py -f reducer_converted_users --day ${date}" \
             ${input_path} \
-            -output ${HDFS_DATA_DIR}/conv_fb_users/${date} || exit 1
+            -output ${HDFS_DATA_DIR}/conv_fb_users_2ver/${date} || exit 1
     fi
 
     if ! ls ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt >/dev/null 2>&1; then
         log_stage "Converted facebook users stat ${date}"
-        ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/conv_fb_users/${date}/part* | ${SCRIPT_DIR}/users.py -f count_converted_users > ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt.tmp && \
+        ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/conv_fb_users_2ver/${date}/part* | ${SCRIPT_DIR}/users.py -f count_converted_users > ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt.tmp && \
             mv ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt.tmp ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt
     fi
 }

@@ -152,9 +152,11 @@ def reducer_converted_users(args):
     """
     new_users = 0
     converted_users = 0
+    converted_users_v2 = 0
     current_key = None
     tags = set()
     current_was_signup = False
+    current_was_signup_v2 = False
     for line in sys.stdin:
         key, tag, _, _, was_signup = line.strip().split()
         tag = int(tag)
@@ -162,15 +164,19 @@ def reducer_converted_users(args):
         if current_key != key:
             if len(tags) == 2 and current_was_signup:
                 converted_users += 1
+            if len(tags) == 2 and current_was_signup_v2:
+                converted_users_v2 += 1
             current_key = key
             tags = set()
             current_was_signup = False
+            current_was_signup_v2 = False
         if tag == 0:
             new_users += 1
             tags.add(tag)
         elif tag == 1:
             if was_signup:
                 current_was_signup = True
+                current_was_signup_v2 = True
             tags.add(tag)
         elif tag == 2:
             if was_signup and current_was_signup:
@@ -179,18 +185,24 @@ def reducer_converted_users(args):
                 current_was_signup = False
     if len(tags) == 2 and current_was_signup:
         converted_users += 1
-    print "%d\t%d" % (new_users, converted_users)
+    if len(tags) == 2 and current_was_signup_v2:
+        converted_users_v2 += 1
+    print "%d\t%d\t%d" % (new_users, converted_users, converted_users_v2)
 
 
 def count_converted_users(_):
-    sum_fields = [0, 0]
+    sum_fields = [0, 0, 0]
     for line in sys.stdin:
         fields = line.strip().split('\t')
         fields = [int(f) for f in fields]
         for i in range(len(sum_fields)):
             sum_fields[i] += fields[i]
-    print "%d\t%d\t%f" % (sum_fields[0], sum_fields[1],
-                          sum_fields[1]/float(sum_fields[0]) if sum_fields[0] > 0 else 0)
+    print "%d\t%d\t%f\t%d\t%f" % (
+        sum_fields[0], sum_fields[1],
+        sum_fields[1]/float(sum_fields[0]) if sum_fields[0] > 0 else 0,
+        sum_fields[2],
+        sum_fields[2]/float(sum_fields[0]) if sum_fields[0] > 0 else 0
+    )
 
 
 if __name__ == '__main__':
