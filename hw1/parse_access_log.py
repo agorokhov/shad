@@ -23,7 +23,7 @@ def mainloop(args):
     regions = load_regions(args.geobase)
     region_keys = [e['lower'] for e in regions]
     for line in sys.stdin:
-        match = record_re.search(line)
+        match = record_re.search(line) # use match() for better results
         if not match:
             continue
         if match.group(6) != "200":
