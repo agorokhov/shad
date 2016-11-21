@@ -211,6 +211,28 @@ function count_facebook_conversion {
 }
 
 
+function count_profile_stat {
+    local date=$1
+    if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/profile_stat/${date}/_SUCCESS >/dev/null 2>&1; then
+        ${HDFS_COMMAND} -rm -r ${HDFS_DATA_DIR}/profile_stat/${date}
+        log_stage "Profile stat ${date}"
+        ${HADOOP_STREAM_COMMAND} \
+            -files ${SCRIPT_DIR}/mr_tasks.py \
+            -D mapred.output.key.comparator.class=org.apache.hadoop.mapred.lib.KeyFieldBasedComparator \
+            -D mapred.text.key.comparator.options=-k1,3 \
+            -D stream.num.map.output.key.fields=3 \
+            -D mapred.text.key.partitioner.options=-k1,1 \
+            -D mapreduce.job.reduces=8 \
+            -mapper "./mr_tasks.py mapper_profile_stat" \
+            -combiner "./mr_tasks.py reducer_combine_profile_stat" \
+            -reducer "./mr_tasks.py reducer_profile_stat" \
+            -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner \
+            -input ${HDFS_DATA_DIR}/extended/${date} \
+            -output ${HDFS_DATA_DIR}/profile_stat/${date}/ || exit 1
+    fi
+}
+
+
 DATE=$1
 shift
 
@@ -227,3 +249,4 @@ count_sessions ${DATE}
 count_pages ${DATE}
 count_new_users ${DATE}
 count_facebook_conversion ${DATE}
+count_profile_stat ${DATE}
