@@ -9,28 +9,33 @@ import logging
 import random
 import sys
 
-logging.basicConfig(level="DEBUG")
+logging.basicConfig(level="INFO")
 
 TABLE = "bigdatashad_" + getpass.getuser() + "_"
 HOSTS = ["hadoop2-%02d.yandex.ru" % i for i in xrange(11, 14)]
+
+PROFILE_STAT_TABLE = TABLE + 'profile_stat'
+PROFILE_USERS_COLUMN = 'u'
+PROFILE_HITS_COLUMN = 'h'
 
 
 def connect():
     host = random.choice(HOSTS)
     conn = happybase.Connection(host)
 
-    logging.debug("Connecting to HBase Thrift Server on %s", host)
+    logging.info("Connecting to HBase Thrift Server on %s", host)
     conn.open()
     return conn
 
 
 def loader_profile_stat(connection, day):
-    table_name = TABLE + 'profile_stat'
+    table_name = PROFILE_STAT_TABLE
     if table_name not in connection.tables():
-        connection.create_table(table_name, {"hits": dict(), "users": dict()})
-        logging.debug("Created table %s", table_name)
+        connection.create_table(table_name, {PROFILE_HITS_COLUMN: dict(),
+                                             PROFILE_USERS_COLUMN: dict()})
+        logging.info("Created table %s", table_name)
     else:
-        logging.debug("Using table %s", table_name)
+        logging.info("Using table %s", table_name)
     table = happybase.Table(table_name, connection)
 
     with table.batch(batch_size=1000) as b:
@@ -43,8 +48,8 @@ def loader_profile_stat(connection, day):
                 b.put(
                     '%s/%s' % (profile, day),
                     {
-                        'hits:%s' % hour: hits,
-                        'users:%s' % hour: users,
+                        '%s:%s' % (PROFILE_HITS_COLUMN, hour): hits,
+                        '%s:%s' % (PROFILE_USERS_COLUMN, hour): users,
                     },
                 )
 

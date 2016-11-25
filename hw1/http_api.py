@@ -7,6 +7,8 @@ import hashlib
 import random
 import struct
 import os.path
+import logging
+import happybase
 
 from flask import Flask, request, abort, jsonify, g
 
@@ -14,6 +16,12 @@ from parse_access_log import load_regions
 
 LOCAL_DATA_DIR = "/home/agorokhov/devel/stat"
 LOCAL_CONFIG_DIR = "/home/agorokhov/devel/conf"
+
+HOSTS = ["hadoop2-%02d.yandex.ru" % i for i in xrange(11, 14)]
+TABLE = "bigdatashad_" + getpass.getuser() + "_"
+PROFILE_STAT_TABLE = TABLE + 'profile_stat'
+PROFILE_USERS_COLUMN = 'u'
+PROFILE_HITS_COLUMN = 'h'
 
 app = Flask(__name__)
 app.secret_key = "gorokhov"
@@ -31,6 +39,17 @@ def get_geo_names():
         regions = load_regions(os.path.join(LOCAL_CONFIG_DIR, 'IP2LOCATION-LITE-DB1.CSV'))
         geo_names = g._geo_names = dict([(r['code'], r['name']) for r in  regions])
     return geo_names
+
+
+def hbase_connect(table_name):
+    host = random.choice(HOSTS)
+    conn = happybase.Connection(host)
+
+    logging.info("Connecting to HBase Thrift Server on %s", host)
+    conn.open()
+
+    table = happybase.Table(table_name, conn)
+    return table
 
 
 @app.teardown_appcontext
@@ -58,6 +77,22 @@ def api_hw1():
         day = date.strftime("%F")
         result[day] = get_day_stats(day)
 
+    return jsonify(result)
+
+
+@app.route("/api/hw2/profile_users")
+def api_hw2_profile_users():
+    (start_date, end_date, profile_id) = get_profile_params()
+
+    result = get_profile_stats(start_date, end_date, profile_id, "users")
+    return jsonify(result)
+
+
+@app.route("/api/hw2/profile_hits")
+def api_hw2_profile_hits():
+    (start_date, end_date, profile_id) = get_profile_params()
+
+    result = get_profile_stats(start_date, end_date, profile_id, "hits")
     return jsonify(result)
 
 
@@ -111,6 +146,29 @@ def get_day_stats(day):
         pass
 
     return stat
+
+
+def get_profile_params():
+    start_date = request.args.get("start_date", None)
+    end_date = request.args.get("end_date", None)
+    profile_id = request.args.get("profile_id", None)
+    if start_date is None or end_date is None or profile_id is None:
+        abort(400)
+    return (start_date, end_date, profile_id)
+
+
+def get_profile_stats(start_date, end_date, profile_id, column):
+    table = hbase_connect(PROFILE_STAT_TABLE)
+    result = {}
+    for key, data in table.scan(row_start=profile_id + '/' + start_date,
+                                row_stop=profile_id + '/' + end_date + '~'):
+        date = key.split('/')[1]
+        if not result.get(date):
+            result[date] = [0 for _ in range(24)]
+        for column, value in data.iteritems():
+            hour = int(column.split(':')[1])
+            result[date][hour] = int(value)
+    return result
 
 
 def login_to_port(login):

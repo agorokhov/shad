@@ -205,7 +205,9 @@ function count_facebook_conversion {
 
     if ! ls ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt >/dev/null 2>&1; then
         log_stage "Converted facebook users stat ${date}"
-        ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/conv_fb_users_2ver/${date}/part* | ${SCRIPT_DIR}/users.py -f count_converted_users > ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt.tmp && \
+        ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/conv_fb_users_2ver/${date}/part* \
+                | ${SCRIPT_DIR}/users.py -f count_converted_users \
+                > ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt.tmp && \
             mv ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt.tmp ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt
     fi
 }
@@ -229,6 +231,16 @@ function count_profile_stat {
             -partitioner org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner \
             -input ${HDFS_DATA_DIR}/extended/${date} \
             -output ${HDFS_DATA_DIR}/profile_stat/${date}/ || exit 1
+    fi
+
+    if [ ! -e ${LOCAL_DATA_DIR}/profile_stat-${date}.ready ]; then
+        log_stage "Profile stat hbase load ${date}"
+        ${HDFS_COMMAND} -cat ${HDFS_DATA_DIR}/profile_stat/${date}/part-* \
+                    > ${LOCAL_DATA_DIR}/profile_stat-${date}.txt && \
+            cat ${LOCAL_DATA_DIR}/profile_stat-${date}.txt \
+                    | ${SCRIPT_DIR}/hbase_loader.py --loader loader_profile_stat --day ${date} && \
+            rm ${LOCAL_DATA_DIR}/profile_stat-${date}.txt && \
+            touch ${LOCAL_DATA_DIR}/profile_stat-${date}.ready
     fi
 }
 
