@@ -61,6 +61,16 @@ def main():
     args.func(**func_args)
 
 
+def sum_int_fields(length):
+    sum_fields = [0 for _ in range(length)]
+    for line in sys.stdin:
+        fields = line.strip().split('\t')
+        fields = [int(f) for f in fields]
+        for i in range(len(sum_fields)):
+            sum_fields[i] += fields[i]
+    return sum_fields
+
+
 def reducer_day_users():
     current_key = None
     day = None
@@ -135,12 +145,7 @@ def reducer_new_users(day, get_users_stat=True, get_new_facebook_users=False):
 
 
 def count_new_users():
-    sum_fields = [0, 0]
-    for line in sys.stdin:
-        fields = line.strip().split('\t')
-        fields = [int(f) for f in fields]
-        for i in range(len(sum_fields)):
-            sum_fields[i] += fields[i]
+    sum_fields = sum_int_fields(2)
     print "%d\t%d" % (sum_fields[0], sum_fields[1])
 
 
@@ -217,12 +222,7 @@ def reducer_converted_users():
 
 
 def count_converted_users():
-    sum_fields = [0, 0, 0]
-    for line in sys.stdin:
-        fields = line.strip().split('\t')
-        fields = [int(f) for f in fields]
-        for i in range(len(sum_fields)):
-            sum_fields[i] += fields[i]
+    sum_fields = sum_int_fields(3)
     print "%d\t%d\t%f\t%d\t%f" % (
         sum_fields[0], sum_fields[1],
         sum_fields[1]/float(sum_fields[0]) if sum_fields[0] > 0 else 0,
@@ -294,6 +294,76 @@ def reducer_profile_stat():
         current_hours[hour][0] += count
     if current_profile:
         print "%s\t%s" % (current_profile, format_hours(current_hours))
+
+
+def mapper_liked_profiles():
+    """
+    For HW3 - select liked profiles, i.e. url=/id1234?like=1
+    Input: extended log (IP, ts, url, ...)
+    Output: profile, day
+    """
+
+    re_liked_profile = re.compile(r'/(id\d+).*[&?]like=1')
+    for line in sys.stdin:
+        fields = line.strip().split('\t')
+        ip, timestamp, url = fields[0], int(fields[1]), fields[2]
+        match = re_liked_profile.match(url)
+        if not match:
+            continue
+        print "\t".join([
+            match.group(1),
+            datetime.datetime.fromtimestamp(timestamp).strftime("%F"),
+        ])
+
+
+def reducer_uniq_value():
+    """
+    For HW3 - combiner to unique days for profile; so in the input days are not unique,
+    in the output - are unique.
+    Input: profile, day
+    Output: profile, day
+    """
+    current_key = None
+    values_set = set()
+    for line in sys.stdin:
+        key, value = line.strip().split('\t', 1)
+        if key != current_key:
+            if values_set:
+                print '\n'.join(['%s\t%s' % (current_key, v) for v in values_set])
+            current_key = key
+            values_set = set()
+        values_set.add(value)
+    if values_set:
+        print '\n'.join(['%s\t%s' % (current_key, v) for v in values_set])
+
+
+def reducer_profile_liked_three_days():
+    """
+    For HW3 - reducer to count number of liked profiles for 3 continuous days.
+    Input: profile, day
+    Output: number_of_profiles
+    """
+    LIKED_PROFILE_PERIOD = 3 # days
+    liked_profiles = 0
+    current_key = None
+    values_set = set()
+    for line in sys.stdin:
+        key, value = line.strip().split('\t', 1)
+        if key != current_key:
+            if len(values_set) == LIKED_PROFILE_PERIOD:
+                liked_profiles += 1
+            current_key = key
+            values_set = set()
+        values_set.add(value)
+    if len(values_set) == LIKED_PROFILE_PERIOD:
+        liked_profiles += 1
+    print "%d" % liked_profiles
+
+
+
+def count_profiles():
+    sum_fields = sum_int_fields(1)
+    print "%d" % sum_fields[0]
 
 
 if __name__ == '__main__':

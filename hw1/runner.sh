@@ -135,7 +135,8 @@ function count_new_users {
     fi
     if ! ls ${LOCAL_DATA_DIR}/new_users-${date}.txt >/dev/null 2>&1; then
         log_stage "New users stat ${date}"
-        ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/new_users/${date}/part* | ${SCRIPT_DIR}/users.py -f count_new_users > ${LOCAL_DATA_DIR}/new_users-${date}.txt.tmp && \
+        ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/new_users/${date}/part* \
+                | ${SCRIPT_DIR}/mr_tasks.py count_new_users > ${LOCAL_DATA_DIR}/new_users-${date}.txt.tmp && \
             mv ${LOCAL_DATA_DIR}/new_users-${date}.txt.tmp ${LOCAL_DATA_DIR}/new_users-${date}.txt
     fi
 }
@@ -206,7 +207,7 @@ function count_facebook_conversion {
     if ! ls ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt >/dev/null 2>&1; then
         log_stage "Converted facebook users stat ${date}"
         ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/conv_fb_users_2ver/${date}/part* \
-                | ${SCRIPT_DIR}/users.py -f count_converted_users \
+                | ${SCRIPT_DIR}/mr_tasks.py count_converted_users \
                 > ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt.tmp && \
             mv ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt.tmp ${LOCAL_DATA_DIR}/conv_fb_users-${date}.txt
     fi
@@ -245,12 +246,52 @@ function count_profile_stat {
 }
 
 
+function count_profile_liked_three_days {
+    local date=$1
+    if ! ${HDFS_COMMAND} -ls ${HDFS_DATA_DIR}/profile_liked_three_days/${date}/_SUCCESS >/dev/null 2>&1; then
+        log_stage "Profile liked three days ${date}"
+        local input_path=
+        for day in {0..2}; do
+            d=`date -d "${date} -${day} day" +%F`
+            path="${HDFS_DATA_DIR}/extended/${d}"
+            if ${HDFS_COMMAND} -ls ${path}/_SUCCESS >/dev/null 2>&1; then
+                input_path="${input_path} -input ${path}"
+            fi
+        done
+
+        ${HDFS_COMMAND} -rm -r ${HDFS_DATA_DIR}/profile_liked_three_days/${date} >/dev/null 2>&1
+        ${HADOOP_STREAM_COMMAND} \
+            -files ${SCRIPT_DIR}/mr_tasks.py \
+            -D mapreduce.job.reduces=8 \
+            -mapper "./mr_tasks.py mapper_liked_profiles" \
+            -combiner "./mr_tasks.py reducer_uniq_value" \
+            -reducer "./mr_tasks.py reducer_profile_liked_three_days" \
+            ${input_path} \
+            -output ${HDFS_DATA_DIR}/profile_liked_three_days/${date} || exit 1
+    fi
+    if ! ls ${LOCAL_DATA_DIR}/profile_liked_three_days-${date}.txt >/dev/null 2>&1; then
+        log_stage "Profile liked three days stat ${date}"
+        ${HDFS_COMMAND} -text ${HDFS_DATA_DIR}/profile_liked_three_days/${date}/part* \
+                | ${SCRIPT_DIR}/mr_tasks.py count_profiles \
+                > ${LOCAL_DATA_DIR}/profile_liked_three_days-${date}.txt.tmp && \
+            mv ${LOCAL_DATA_DIR}/profile_liked_three_days-${date}.txt.tmp \
+                ${LOCAL_DATA_DIR}/profile_liked_three_days-${date}.txt
+    fi
+}
+
 DATE=$1
 shift
+
+# locking with pidfile
+PIDFILE=${LOCAL_DATA_DIR}/$(basename $0)".pid"
+[ -e $PIDFILE ] && kill -0 `cat $PIDFILE` && echo "Already started, pid=`cat $PIDFILE`" && exit 0
+echo $$ > $PIDFILE
+
 
 if [ $(is_log_ready ${DATE}) ]; then
     log_stage "Starting ${DATE}"
 else
+    rm $PIDFILE
     exit 1
 fi
 
@@ -262,3 +303,6 @@ count_pages ${DATE}
 count_new_users ${DATE}
 count_facebook_conversion ${DATE}
 count_profile_stat ${DATE}
+count_profile_liked_three_days ${DATE}
+
+rm $PIDFILE

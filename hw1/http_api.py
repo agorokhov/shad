@@ -145,6 +145,15 @@ def get_day_stats(day):
     except IOError:
         pass
 
+    try:
+        with open(os.path.join(LOCAL_DATA_DIR, 'profile_liked_three_days-%s.txt' % day)) as fd:
+            for line in fd:
+                stat['profile_liked_three_days'] = int(line.strip())
+                break
+    except IOError:
+        pass
+
+
     return stat
 
 
