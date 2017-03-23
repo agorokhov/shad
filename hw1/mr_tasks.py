@@ -1,5 +1,26 @@
 #!/usr/bin/env python
 """
+Script to run functions, useful for MR streaming.
+Runs methods by name, name can starts with:
+- 'mapper_' - mapper function
+- 'reducer_' - reducer function
+- 'sort_' - sort in-memory
+- 'count_' - locally sum (count) values from several files
+
+Usage:
+$ mr_tasks.py FUNCTION [PARAMETERS ...]
+
+Examples:
+
+- list all possible functions:
+$ mr_tasks.py -h
+
+- run function 'reducer_new_users' with default parameters:
+$ mr_tasks.py reducer_new_users
+
+- help for all function 'reducer_new_users' parameters:
+$ mr_tasks.py reducer_new_users -h
+
 """
 
 import sys
