@@ -2,36 +2,36 @@
 
     public class WordCount extends Configured implements Tool {
 
-    	public static void main(String[] args) throws Exception {        ---
-        	ToolRunner.run(new WordCount(), args);                         |
-    	}                                                                ---
+        public static void main(String[] args) throws Exception {        ---
+            ToolRunner.run(new WordCount(), args);                         |
+        }                                                                ---
 
-    	@Override
-    	public int run(String[] args) throws Exception {
-        	Configuration conf = this.getConf();                        --- 
-        	Job job = new Job(conf);                                      |
-	        ...                                                           |
-        	int status = job.waitForCompletion(true) ? 0 : 1;             |
-        	return status;                                                |
-    	}                                                               ---
+        @Override
+        public int run(String[] args) throws Exception {
+            Configuration conf = this.getConf();                        ---
+            Job job = new Job(conf);                                      |
+            ...                                                           |
+            int status = job.waitForCompletion(true) ? 0 : 1;             |
+            return status;                                                |
+        }                                                               ---
 
-    	public static class WordCountMapper extends Mapper<LongWritable, Text, Text, LongWritable> {
+        public static class WordCountMapper extends Mapper<LongWritable, Text, Text, LongWritable> {
 
-        	@Override
-        	public void setup(Context context)
-                	throws IOException
-        	{                                                          ---
-				...                                                      |
-        	}                                                          ---
+            @Override
+            public void setup(Context context)
+                    throws IOException
+            {                                                          ---
+                ...                                                      |
+            }                                                          ---
 
-        	@Override
-        	public void map(LongWritable offset, Text line, Context context)
+            @Override
+            public void map(LongWritable offset, Text line, Context context)
                 throws IOException, InterruptedException
-        	{                                                          ---   
-				...                                                      |
-        	}                                                          ---
-    	}
-	}
+            {                                                          ---
+                ...                                                      |
+            }                                                          ---
+        }
+    }
 
 Варианты ответов: рабочий сервер (тот, где запускаете программу), мастер кластера, нода кластера, маппер, редьюсер.
 
@@ -41,39 +41,39 @@
 
 
     public class WordCount extends Configured implements Tool {
-		public static int variable = 0;                          <---------
+        public static int variable = 0;                          <---------
 
-    	public static void main(String[] args) throws Exception {        
-        	ToolRunner.run(new WordCount(), args);                       
-    	}                                                                
+        public static void main(String[] args) throws Exception {
+            ToolRunner.run(new WordCount(), args);
+        }
 
-    	@Override
-    	public int run(String[] args) throws Exception {
-        	Configuration conf = this.getConf();
-			variable = 25;                                       <---------                      
-        	Job job = new Job(conf);                                      
-	        ...                                                           
-        	int status = job.waitForCompletion(true) ? 0 : 1;             
-        	return status;                                                
-    	}                                                               
+        @Override
+        public int run(String[] args) throws Exception {
+            Configuration conf = this.getConf();
+            variable = 25;                                       <---------
+            Job job = new Job(conf);
+            ...
+            int status = job.waitForCompletion(true) ? 0 : 1;
+            return status;
+        }
 
-    	public static class WordCountMapper extends Mapper<LongWritable, Text, Text, LongWritable> {
+        public static class WordCountMapper extends Mapper<LongWritable, Text, Text, LongWritable> {
 
-        	@Override
-        	public void setup(Context context)
-                	throws IOException
-        	{                                                          
-				System.err.println(variable);                    <---------                                                       
-        	}                                                          
+            @Override
+            public void setup(Context context)
+                    throws IOException
+            {
+                System.err.println(variable);                    <---------
+            }
 
-        	@Override
-        	public void map(LongWritable offset, Text line, Context context)
+            @Override
+            public void map(LongWritable offset, Text line, Context context)
                 throws IOException, InterruptedException
-        	{                                                             
-				...                                                      
-        	}                                                          
-    	}
-	}
+            {
+                ...
+            }
+        }
+    }
 
 (В нем есть главный класс и переменная-член. В main() ей присваивается некое значение. В Mapper.setup() выводим её на печать.) Какое значение будет выведено?
 
@@ -96,3 +96,4 @@
 =====
 
 2.7 Ваша MapReduce программа на map-стадии читает строки определенного формата. Правда, среди них могут быть и некорректные строки. Как определить, были ли такие строки и много ли их было? Программа не должна при этом завершаться с ошибкой, а выдавать результат, полученный для правильных строк.
+
