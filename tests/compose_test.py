@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+"""
+Script creates tests from given files with tasks.
+
+Example:
+compose_test.py --count 20 --output-file test_out.md file1.md file1.md file2.md
+-- make 20 tests of 3 random tasks from file.md (first, second) and file2.md (third).
+
+"""
 
 import sys
 import argparse
