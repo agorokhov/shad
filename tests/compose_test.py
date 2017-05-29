@@ -38,7 +38,7 @@ def read_file_tasks(filename):
 
         for line in fd:
             line = line.rstrip()
-            if line.startswith('====='):
+            if line.startswith('=====') or line.startswith('-----'):
                 if current_task:
                     result.append(current_id + ' ' + current_task)
                     current_id = None
