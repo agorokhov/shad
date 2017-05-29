@@ -5,6 +5,10 @@ import argparse
 import random
 from collections import defaultdict
 
+MD_HORIZON_LINE = '----------'
+TASKS_SEPARATOR = '====='
+HTML_PAGE_BREAK = '<p style="page-break-before: always">'
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('task_files', metavar='T', type=str, nargs='+',
@@ -38,7 +42,9 @@ def read_file_tasks(filename):
 
         for line in fd:
             line = line.rstrip()
-            if line.startswith('=====') or line.startswith('-----'):
+            if line.strip().lower().startswith(HTML_PAGE_BREAK):
+                continue
+            if line.startswith(TASKS_SEPARATOR) or line.startswith(MD_HORIZON_LINE):
                 if current_task:
                     result.append(current_id + ' ' + current_task)
                     current_id = None
@@ -62,8 +68,8 @@ def compose_tests(tasks, count, output_file):
         stats = {}
         for _ in range(count):
             print >> fd, compose_one_test(tasks, stats)
-            print >> fd, '----------'
-            print >> fd, '<P style="page-break-before: always">'
+            print >> fd, MD_HORIZON_LINE
+            print >> fd, HTML_PAGE_BREAK
         print '\n'.join(['%s - %s' % (k, v) for k, v in stats.iteritems()])
 
 
